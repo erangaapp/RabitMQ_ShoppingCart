@@ -1,0 +1,104 @@
+@page "/basket"
+@inject BasketApi BasketClient
+@inject TokenProvider Tokens
+@inject NavigationManager Nav
+
+<h1>Your Basket</h1>
+
+@if (!Tokens.IsAuthenticated)
+{
+    <p>Please <a href="/login">log in</a> to view your basket.</p>
+}
+else if (basket is null)
+{
+    <p>Loading…</p>
+}
+else if (basket.Items.Count == 0 && !checkedOut)
+{
+    <p class="muted">Your basket is empty. <a href="/products">Browse products</a>.</p>
+}
+else
+{
+    @if (checkedOut)
+    {
+        <div class="alert alert-success">
+            ✅ Checkout accepted! Your order is being processed asynchronously via RabbitMQ.
+            Check <a href="/orders">My Orders</a> in a moment, and the confirmation email in
+            <a href="http://localhost:8080" target="_blank">Papercut</a>.
+        </div>
+    }
+
+    @if (basket.Items.Count > 0)
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Unit Price</th>
+                    <th>Qty</th>
+                    <th>Line Total</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in basket.Items)
+                {
+                    <tr>
+                        <td>@item.ProductName</td>
+                        <td>@item.UnitPrice.ToString("0.00")</td>
+                        <td class="qty-cell">
+                            <button class="btn btn-outline sm" @onclick="() => ChangeQtyAsync(item, -1)">−</button>
+                            <span>@item.Quantity</span>
+                            <button class="btn btn-outline sm" @onclick="() => ChangeQtyAsync(item, +1)">+</button>
+                        </td>
+                        <td>@((item.UnitPrice * item.Quantity).ToString("0.00"))</td>
+                        <td><button class="btn btn-danger sm" @onclick="() => RemoveAsync(item)">Remove</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="card totals">
+            <div><span>Subtotal</span><span>@basket.Subtotal.ToString("0.00") AED</span></div>
+            <div><span>Discount (10% over 100)</span><span>−@basket.Discount.ToString("0.00") AED</span></div>
+            <div><span>VAT (5%)</span><span>@basket.Vat.ToString("0.00") AED</span></div>
+            <div class="grand"><span>Total</span><span>@basket.Total.ToString("0.00") AED</span></div>
+            <button class="btn btn-primary block" @onclick="CheckoutAsync" disabled="@busy">
+                @(busy ? "Processing…" : "Checkout")
+            </button>
+        </div>
+    }
+}
+
+@code {
+    private BasketDto? basket;
+    private bool busy;
+    private bool checkedOut;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Tokens.IsAuthenticated)
+            basket = await BasketClient.GetAsync();
+    }
+
+    private async Task ChangeQtyAsync(BasketItemDto item, int delta) =>
+        basket = await BasketClient.SetQuantityAsync(item.ProductId, item.Quantity + delta);
+
+    private async Task RemoveAsync(BasketItemDto item) =>
+        basket = await BasketClient.RemoveItemAsync(item.ProductId);
+
+    private async Task CheckoutAsync()
+    {
+        busy = true;
+        try
+        {
+            checkedOut = await BasketClient.CheckoutAsync();
+            if (checkedOut)
+                basket = await BasketClient.GetAsync(); // now empty
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

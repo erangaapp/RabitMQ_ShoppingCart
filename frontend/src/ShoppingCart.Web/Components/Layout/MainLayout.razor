@@ -1,0 +1,40 @@
+@inherits LayoutComponentBase
+@inject TokenProvider Tokens
+@inject NavigationManager Nav
+@implements IDisposable
+
+<header class="topbar">
+    <a class="brand" href="/products">🛒 ShopPOC</a>
+    <nav>
+        <a href="/products">Products</a>
+        <a href="/basket">Basket</a>
+        <a href="/orders">My Orders</a>
+    </nav>
+    <div class="auth-area">
+        @if (Tokens.IsAuthenticated)
+        {
+            <span class="user-name">@Tokens.Session!.FullName</span>
+            <button class="btn btn-outline" @onclick="Logout">Log out</button>
+        }
+        else
+        {
+            <a class="btn btn-primary" href="/login">Log in</a>
+        }
+    </div>
+</header>
+
+<main class="page">
+    @Body
+</main>
+
+@code {
+    protected override void OnInitialized() => Tokens.Changed += StateHasChanged;
+
+    private void Logout()
+    {
+        Tokens.Clear();
+        Nav.NavigateTo("/login");
+    }
+
+    public void Dispose() => Tokens.Changed -= StateHasChanged;
+}

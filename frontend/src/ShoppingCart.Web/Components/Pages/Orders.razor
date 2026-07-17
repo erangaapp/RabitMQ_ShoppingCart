@@ -1,0 +1,53 @@
+@page "/orders"
+@inject OrdersApi OrdersClient
+@inject TokenProvider Tokens
+
+<h1>My Orders</h1>
+
+@if (!Tokens.IsAuthenticated)
+{
+    <p>Please <a href="/login">log in</a> to view your orders.</p>
+}
+else if (orders is null)
+{
+    <p>Loading…</p>
+}
+else if (orders.Count == 0)
+{
+    <p class="muted">No orders yet. Orders appear here shortly after checkout (processed via RabbitMQ).</p>
+    <button class="btn btn-outline" @onclick="RefreshAsync">Refresh</button>
+}
+else
+{
+    <button class="btn btn-outline" @onclick="RefreshAsync">Refresh</button>
+
+    @foreach (var order in orders)
+    {
+        <div class="card order">
+            <div class="order-header">
+                <span class="mono">#@order.Id.ToString()[..8].ToUpper()</span>
+                <span class="badge">@order.Status</span>
+                <span class="muted">@order.PlacedAtUtc.ToLocalTime().ToString("g")</span>
+                <span class="price">@order.Total.ToString("0.00") AED</span>
+            </div>
+            <ul>
+                @foreach (var item in order.Items)
+                {
+                    <li>@item.Quantity × @item.ProductName — @item.UnitPrice.ToString("0.00")</li>
+                }
+            </ul>
+        </div>
+    }
+}
+
+@code {
+    private List<OrderDto>? orders;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        if (Tokens.IsAuthenticated)
+            orders = await OrdersClient.GetMyOrdersAsync();
+    }
+}

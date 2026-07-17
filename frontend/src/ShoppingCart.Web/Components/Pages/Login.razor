@@ -1,0 +1,80 @@
+@page "/login"
+@inject AuthApi Auth
+@inject TokenProvider Tokens
+@inject NavigationManager Nav
+
+<div class="card narrow">
+    <h1>@(registerMode ? "Create account" : "Log in")</h1>
+
+    @if (error is not null)
+    {
+        <div class="alert alert-error">@error</div>
+    }
+
+    @if (registerMode)
+    {
+        <label>Full name</label>
+        <input @bind="fullName" placeholder="Your name" />
+    }
+
+    <label>Email</label>
+    <input @bind="email" type="email" placeholder="demo@shop.local" />
+
+    <label>Password</label>
+    <input @bind="password" type="password" placeholder="Pass@123" />
+
+    <button class="btn btn-primary block" @onclick="SubmitAsync" disabled="@busy">
+        @(busy ? "Please wait…" : registerMode ? "Register" : "Log in")
+    </button>
+
+    <p class="muted">
+        @if (registerMode)
+        {
+            <span>Already have an account? <a href="" @onclick="() => registerMode = false" @onclick:preventDefault>Log in</a></span>
+        }
+        else
+        {
+            <span>New here? <a href="" @onclick="() => registerMode = true" @onclick:preventDefault>Create an account</a></span>
+        }
+    </p>
+
+    <p class="muted">Seeded demo user: <code>demo@shop.local</code> / <code>Pass@123</code></p>
+</div>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string fullName = "";
+    private string? error;
+    private bool busy;
+    private bool registerMode;
+
+    private async Task SubmitAsync()
+    {
+        error = null;
+        busy = true;
+        try
+        {
+            var (session, err) = registerMode
+                ? await Auth.RegisterAsync(new RegisterRequest(email, password, fullName))
+                : await Auth.LoginAsync(new LoginRequest(email, password));
+
+            if (session is null)
+            {
+                error = err ?? "Something went wrong.";
+                return;
+            }
+
+            Tokens.Set(session);
+            Nav.NavigateTo("/products");
+        }
+        catch (HttpRequestException)
+        {
+            error = "Could not reach the Identity service. Is it running on port 5001?";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

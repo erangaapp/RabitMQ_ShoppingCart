@@ -1,0 +1,104 @@
+@page "/products"
+@inject CatalogApi Catalog
+@inject StockApi Stock
+@inject BasketApi Basket
+@inject TokenProvider Tokens
+@inject NavigationManager Nav
+
+<h1>Products</h1>
+
+@if (categories is not null)
+{
+    <div class="chip-row">
+        <button class="chip @(selectedCategory is null ? "active" : "")" @onclick="() => FilterAsync(null)">All</button>
+        @foreach (var category in categories)
+        {
+            <button class="chip @(selectedCategory == category ? "active" : "")" @onclick="() => FilterAsync(category)">@category</button>
+        }
+    </div>
+}
+
+@if (message is not null)
+{
+    <div class="alert alert-info">@message</div>
+}
+
+@if (products is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div class="grid">
+        @foreach (var product in products)
+        {
+            var stock = stockByProduct.GetValueOrDefault(product.Id);
+            <div class="card product">
+                <div class="product-category">@product.Category</div>
+                <h3>@product.Name</h3>
+                <p class="muted">@product.Description</p>
+                @if (stock is null)
+                {
+                    <p class="muted">No price yet</p>
+                }
+                else
+                {
+                    <div class="price-row">
+                        <span class="price">@stock.Price.ToString("0.00") AED</span>
+                        <span class="stock @(stock.Quantity == 0 ? "out" : "")">
+                            @(stock.Quantity == 0 ? "Out of stock" : $"{stock.Quantity} in stock")
+                        </span>
+                    </div>
+                    <button class="btn btn-primary block"
+                            disabled="@(stock.Quantity == 0)"
+                            @onclick="() => AddToBasketAsync(product, stock)">
+                        Add to basket
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<ProductDto>? products;
+    private List<string>? categories;
+    private Dictionary<Guid, StockDto> stockByProduct = new();
+    private string? selectedCategory;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await Catalog.GetCategoriesAsync();
+        await LoadAsync();
+    }
+
+    private async Task FilterAsync(string? category)
+    {
+        selectedCategory = category;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        products = await Catalog.GetProductsAsync(selectedCategory);
+        if (products is { Count: > 0 })
+        {
+            // Prices and stock come from the Inventory service, not Catalog.
+            var stock = await Stock.GetStockAsync(products.Select(p => p.Id)) ?? [];
+            stockByProduct = stock.ToDictionary(s => s.ProductId);
+        }
+    }
+
+    private async Task AddToBasketAsync(ProductDto product, StockDto stock)
+    {
+        if (!Tokens.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        await Basket.AddItemAsync(new AddBasketItemRequest(product.Id, product.Name, stock.Price, 1));
+        message = $"Added {product.Name} to your basket.";
+    }
+}
